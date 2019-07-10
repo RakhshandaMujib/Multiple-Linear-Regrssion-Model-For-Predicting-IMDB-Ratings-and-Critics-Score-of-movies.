@@ -1,0 +1,1596 @@
+---
+title: "Modeling and prediction for movies"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+The dataset is comprised of 651 randomly sampled movies produced and released before 2016. All information have been derived from the official websites of IMDB and Rotten Tomatoes. 
+As far as IMDB is concerned, all the registered members there can cast their votes/ratings for any movie. It takes all the individual votes cast by the registered users and uses them to calculate a single rating.They however, don't use the arithmetic mean or median of the votes to get the final rating. The rating displayed on a movie's page is a weighted average rating. Though some of the websites claim that they know how weighted average of IMDb works, IMDb itself has never given out the method that they use for the fear of it being manipulated. They state on their website that they use the same method for all the movies without any bias so that the ratings are fair.
+Similarly, the score that Rotten Tomatoes assigns to a film corresponds to the percentage of critics who've judged the film to be "fresh," meaning their opinion of it is more positive than negative. The idea is to quickly offer moviegoers a sense of critical consensus. The opinions of about 3,000 critics - a.k.a. the "Approved Tomatometer Critics" who have met a series of criteria set by Rotten Tomatoes - are included in the site's scores, though not every critic reviews every film, so any given score is more typically derived from a few hundred critics, or even less. Rotten Tomatoes only aggregates critics who have been regularly publishing movie reviews with a reasonably widely read outlet for at least two years, and those critics must be "active," meaning they've published at least one review in the last year. The site also deems a subset of critics to be "top critics" and calculates a separate score that only includes them.
+
+(The above information has been taken from: 
+[this](https://urlzs.com/Xe6PC) for Rotten Tomatoes and
+[this](https://urlzs.com/W9pBF) for IMDB)
+
+
+### Load packages
+
+
+We use four packages here for the purpose of this project- `dplyr`, `statsr`, `ggplot2` and `gridExtra`. 
+While `dplyr` allows us to explore the data and perform various operations needed to wrangle and manipulate the same in the way we want to, `ggplot2` is used for providing us a better grasp over the insights drawn with the help of graphical techniques like barplots, scatter diagrams, histograms etc. `statsr` is used for basic statistical computation like with the help of functions like inference and `gridExtra` will be used for plotting different graphs in a grid like fashion.
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+library(gridExtra)
+```
+
+### Load data
+ 
+Let us load the data using the *load()* function. 
+
+```{r load-data}
+load("movies.Rdata")
+```
+
+It is always a good idea to view what the dataset looks like. One way we can do this is by viewing the variables included in it. We use the *names()* function to the same:
+
+```{r}
+names(movies)
+```
+
+* * *
+
+## Part 1: Data
+
+The data provided in the dataset comes from Rotten Tomatoes and IMDB. Here are some facts about the data collection method that were are going to analyse:
+
+  1) The method of sampling employed is random sampling. Since, the movies are sampled at random we can generalize the results to movies in general and make predictions accordingly. 
+
+  2) The study is not an experimental study but an observational study (retrospective in nature), so any association between any two (or more) variables does not necessarily imply a causal relationship between the same.
+
+  3) As the previous point discusses, the study is an observational one and not an experimental one so we have no treatment or controlled groups. When we do not have these groups, we cannot randomly assign people to them. That is, causalty cannot be inferred.
+
+  4) Talking about the biases, there is a possibilty of having non-response bias where individuals can just refuse to rate a movie. Convenience bias is also possible since only people who have access to the internet can cast their votes for a movie.
+
+* * *
+
+## Part 2: Research question
+
+### For the EDA: 
+
+**Which genre of the movies is most likely to be rated unsuitable for undearage audience by the Motion Picture Association of America (MPAA)? Do we have any statistically significant evidence to show that the MPAA rating of a film  changes its overall audience score on Rotten Tomatoes?**
+
+It may so happen for the number of audience to reduce because of the MPAA rating of a film, for instance, the entire population of children and teens would not watch a movie that is rated R or 'Restricted' (assuming they won't do it illegitimately or the theatres won't allow them callously), but at the same time, can we say that this reduction would allow the audience ratings of a movie to drop or rise?   
+
+### For model fitting and prediction: 
+
+**Define a model to predict the IMDB rating of a movie based on the information provided by the** *movies* **dataset. Define another model that does the same for ratings on Rotten Tomatoes. Do the two models show any resemblance with the predictions? Which model is more reliable of the two?**
+
+Answering this question would help us reveal if or not the audience vary to a great extent on these two platforms for rating movies. 
+It will help us to find out the nature of movies (like, the genre) that gets more preference on both the platforms by recieving better grades. Also, we will be able to decide whether or not the likelihood of a movie can be generalized to particular type. 
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+**Which genre of the movies is most likely to be rated unsuitable for undearage audience by the Motion Picture Association of America (MPAA)? Do we have any statistically significant evidence to show that the MPAA rating of a film  changes its overall audience score on Rotten Tomatoes?**
+
+For answering the above question, below is the list of variables that we are going to work with:
+
+
+
+`genre` : A categorical variable that tells us about the genre of a film. Takes up the levels- **Action & Adventure, Comedy, Documentary, Drama, Horror, Mystery & Suspense, Other**.
+
+`mpaa_rating` : A categorical variable that gives us the MPAA rating of the movie with levels- **G** (General Audiences), **PG** (Parental Guidance Suggested), **PG-13** (Parents Strongly Cautioned), **R** (Restricted), **Unrated** (Movies that haven't recieved any MPAA ratings before theatrical release) and **NC-17** (Adults only).
+
+`audience_score` : Audience score on Rotten Tomatoes
+
+For the variable `mpaa_rating` we actually do not need the level 'Unrated'. Thus, let us create a new variable that will hold the ratings and will assign NA for every unrated movie. 
+
+```{r}
+movies <- movies%>%
+  mutate(mpaa_rev = mpaa_rating) #Creating a new variable 'mpaa_rev' so that the                                   original variable isn't disturbed.
+
+levels(movies$mpaa_rev)[levels(movies$mpaa_rev) == 'Unrated'] <- NA
+```
+
+Now, let us create a table that will show us the count of movies for each level of `genre` and `mpaa_rev`:
+
+```{r}
+tab1<- table(movies$genre, movies$mpaa_rev)
+tab1_summed <- addmargins(tab1)
+ftable(tab1_summed)
+```
+
+If we look at the above contigency table, we'll observe that there are only 2 movies that have been rated *NC-17* and these movies come from the genre of *Drama* which also seems to be the genre with the highest number of movies in general. There are 329 movies rated *R* by MPAA marking the maximum proportion of rated films by MPAA, again.
+
+Let us now, view a mossaic plot for better understanding of the above results but before we do that, let us number the levels for `genre` to correctly fit them in our plot.
+
+```{r}
+genre_numbered <- table(as.numeric(movies$genre), movies$mpaa_rev)
+# 1 - Action & Adventure           
+# 2 - Animation                    
+# 3 - Art House & International    
+# 4 - Comedy                       
+# 5 - Documentary                 
+# 6 - Drama                     
+# 7 - Horror                      
+# 8 - Musical & Performing Arts    
+# 9 - Mystery & Suspense           
+# 10 - Other                        
+# 11 - Science Fiction & Fantasy
+```
+
+Now we are going to use `genre_numbered` for our plot.
+
+```{r}
+mosaicplot(genre_numbered, color= c("#00994C", "#00CC66", "#00FF80", "#33FF99", "#66FFB2"), xlab = "Genre", ylab = "MPAA Rating", main = "Genre v/s MPAA Rating", cex.axis = 0.7)
+```
+
+There are a few interesting insights that we get from the above plot. The genre that has the maximum proportion of movies suitable for the general audience (rated *G* by MPAA) is *2*- Animation. The genre that mostly promotes restricted (rated *R* by MPAA) contents is *7*- Horror followed by *3*- Art House & International.
+If we categorise the ratings as suitable for underage audience and not suitable for underage audience, we may choose **G, PG** & **PG-13** to fall in the prior and **R** & **NC-17** to fall in the latter category, respectively. 
+Let us now view a plot, that will help us to get the idea more clearly about which genre is most suitable for underage audience and which is not. 
+For that, we need a new variable `for_underage` that will categorise the MPAA ratings as 'Suitable' and 'Not suitable':
+
+```{r}
+movies <- movies %>%
+  mutate(for_underage = mpaa_rev)
+
+levels(movies$for_underage)[levels(movies$for_underage) %in% c('R', 'NC-17')] <- 'Not suitable'
+levels(movies$for_underage)[levels(movies$for_underage) %in% c('G', 'PG-13', 'PG')] <- 'Suitable'
+
+```
+
+Let us create a new table with the variable `for_underage`:
+
+```{r}
+tab_underage <- table(as.numeric(movies$genre), movies$for_underage)
+ftable(tab_underage)
+```
+
+Now, that we've categorised the MPAA ratings, let us have our plot again for better visualization. 
+
+```{r}
+mosaicplot(tab_underage, color= c("green", "red"), xlab = "Genre", ylab = "Content for underage audience", main = "Genre v/s Content for underage audience", cex.axis = 0.7)
+```
+
+Thus, we can now, see that more than half of the content produced in the movies industry is not suitable for underage audience with genre *7* (**Horror**), *3* (**Art House & International**) and *9* (**Mystery & Suspense**) being forming the major of unsuitable categories. 
+We can get the exact proportions by adding the margins of `tab_underage` table as:
+
+```{r}
+tab_underage_summed <- addmargins(tab_underage)
+ftable(tab_underage_summed)
+```
+
+Hence, 331/601 (0.5507488) or *55.08%* movies are not suggested to be watched by the underage audience. 
+
+
+####Hypotheses Test:
+
+To answer the second part of our question, we are going to conduct a hypotheses test. It is evident from the question stated above that we are working with one categorical (`mpaa_rev`) and one numerical (`audience_score`) variable. Therefore, for this test, the method that we're going to employ is ANOVA or Analysis of Variance with the hypotheses being stated as follows:
+
+**$H_0$: There is no association between the MPAA rating of a film and its corresponding audience score on Rotten Tomatoes. In other words, the average audience score is the same across all the categories of the MPAA rating of movies.**
+
+$$H_0 : \mu_G = \mu_{NC-17} = \mu_{PG} = \mu_{PG-13} = \mu_R $$
+
+**$H_A$: There is some association between the MPAA rating of a film and the scores given by the audience. In other words, there is at least a pair of categories for the MPAA ratings of film for which the average audience score is different.**
+
+
+One interesting thing that we can do here is view a boxplot that would help us to visualize the overall spread of the audience score across the various levels of the MPAA ratings. 
+
+```{r}
+movies %>%
+  filter(!is.na(mpaa_rev)) %>% #We don't want any NULL values for the plot to be successfully created.
+  ggplot(aes(x= mpaa_rev, y = audience_score), xlab = "MPAA ratings", ylab = "Audience score on Rotten Tomatoes")+
+  geom_boxplot()
+```
+
+
+From the above plot we can say, that the movies rated *R* and *PG* have almost recieved similar audience scoring with very little difference in the medians. The movies rated *NC-17* have recieved scoring from somewhere around 55 to 70. There is a single outlier for the rating *G* that has happened to recieve a score of less than 25. Overall, the movies rated *G* happen to get the best scorings with IQR ranging from about 60 to about 84. 
+
+Now, let us finally do our hypotheses test. As a first step however, we can create a separate dataframe that is only going to store our variables of interest. Since, we are trying to look at the difference in mean among the levels of MPAA ratings, we might as well group the data accordingly. 
+
+```{r}
+tab2<- movies%>%
+  filter(!is.na(mpaa_rev), !is.na(audience_score)) %>%
+  group_by(mpaa_rev)%>%
+  select(mpaa_rev,audience_score)
+```
+
+
+Let us use the above dataframe to get our anova results. 
+
+```{r}
+Anova_results <- aov(audience_score~ mpaa_rev, data = tab2)
+summary(Anova_results)
+```
+
+#### Conclusion:
+
+As we can see, the p-value from the anova result is equal to *0.0408* which is definitely less than 0.05. This means we have statistically significant evidence to *reject* our null hypothesis $H_0$ in favour of the alternative $H_A$, at a 95% significance level. 
+In other words, we in fact do have statistically significant evidence to say that the audience scoring on Rotten Tomatoes is associated with the MPAA ratings of a movie. In essence, the MPAA ratings of a movie may affect the audience scoring of a movie on Rotten Tomatoes.
+
+
+
+
+* * *
+
+## Part 4: Modeling
+
+
+
+**Define a model to predict the IMDB rating of a movie based on the information provided by the** *movies* **dataset. Define another model that does the same for critics score on Rotten Tomatoes. Do the two models show any resemblance with the as far as the predictors are concerned? Which model is more reliable of the two?**
+
+
+The first half of the above question demands us to define models for predicting the IMDB ratings and critics scoring on Rotten Tomatoes for movies. In the second half we see, that we are being asked to check and compare the *reliability of pridictions* of our models. Thus, we'll use the *adjusted R squared* method to create our the same along with the techniques of *backward elimination* and *forward selection*. Eventually, we'll select the model with the highest value for adjusted R squared as our final model in either of the cases.
+
+
+
+###Dfining a model for predicting IMDB ratings of a movie.
+
+
+
+#### Dropping Variables:
+
+
+Let us view the variables given to us by the *movies* dataset again, to get an idea about the variables that we need to drop for beginning with the full model.
+
+```{r}
+names(movies)
+```
+
+Out of the now, 34 variables the following are the set of variables that we may want to drop before creating our full model:
+
+- `title`, `director`, `actor1`, `actor2`, `actor3`, `actor4`, `actor5`, `studio` - These variables have a lot of levels which may not be useful to us. Some people might have a favourite actor or director and may be biased while casting their votes. But, again, we cannot miss the fact their may be many favourite actors or directors and our model cannot take account of them all. 
+
+- `critics_rating`, `critics_score`, `audience_rating`, `audience_score` - All these variables are associated with Rotten Tomatoes. Now, the ratings on IMDB should ideally be independent of ratings on any other similar website like Rotten Tomatoes. Hence, in order to avoid including any influential predictors related to Rotten Tomatoes we must drop the same. This may come at the cost of losing predictive powers of our model but again, for a just comparison between the two, it is in fact necessary. 
+
+- `imdb_url`, `rt_url` - Absolutely meaningless to include the URLS of the movies on either of the websites.
+
+- `mpaa_rev`, `for_underage` - These variables are derived from the variable `mpaa_rating` and will obviously have some degree of collinearity associated with the same. 
+
+
+
+
+#### Beginning with modelling:
+
+
+Let us create a dataframe with the variables we have chosen as potent pridictors for our model.
+
+```{r}
+tab_mod_IMDB <- movies%>%
+  filter(!is.na(imdb_rating), !is.na(title_type), !is.na(genre), !is.na(runtime), !is.na(mpaa_rating), !is.na(thtr_rel_year), !is.na(thtr_rel_month), !is.na(thtr_rel_day), !is.na(dvd_rel_year), !is.na(dvd_rel_month), !is.na(dvd_rel_day), !is.na(imdb_num_votes), !is.na(best_pic_nom), !is.na(best_pic_win), !is.na(best_actor_win), !is.na(best_actress_win), !is.na(best_dir_win), !is.na(top200_box)) %>%
+  select(imdb_rating, title_type, genre , runtime , mpaa_rating , thtr_rel_year , thtr_rel_month , thtr_rel_day , dvd_rel_year , dvd_rel_month , dvd_rel_day , imdb_num_votes , best_pic_nom , best_pic_win , best_actor_win , best_actress_win , best_dir_win , top200_box)
+ 
+```
+
+
+
+
+##### Modelling using backward elimination: 
+
+
+
+
+For backward elimination we are needed to begin with a full model. In our case, the full model is going to include all the variables present in the dataframe (*tab_mod_IMDB*) we just created above. For simplicity purpose, we are only going to extract the adjusted R squared value for every model we define after successive drop of predictors. 
+
+
+
+**Full model**:
+
+```{r}
+mod_IMDB_bwd = lm(imdb_rating ~ title_type + genre + runtime + mpaa_rating + thtr_rel_year + thtr_rel_month + thtr_rel_day + dvd_rel_year + dvd_rel_month + dvd_rel_day + imdb_num_votes + best_pic_nom + best_pic_win + best_actor_win + best_actress_win + best_dir_win + top200_box, data = tab_mod_IMDB)
+summary(mod_IMDB_bwd)$adj.r.squared
+```
+
+To start with, 0.41 is a pretty good value for our adjusted R squared. However, let us see how we can maximize the same by dropping more and more predictors ahead.
+
+
+
+**Dropping the first predictor:**
+
+```{r}
+mod_IMDB_bwd = lm(imdb_rating ~ title_type +genre + runtime + mpaa_rating + thtr_rel_year + thtr_rel_day + dvd_rel_year + dvd_rel_month + dvd_rel_day + imdb_num_votes + best_pic_nom + best_pic_win + best_actor_win + best_actress_win + best_dir_win + top200_box, data = tab_mod_IMDB)
+summary(mod_IMDB_bwd)$adj.r.squared
+```
+
+ We see an increase in the adjusted R squared after dropping the predictor `thtr_rel_month`. 
+ 
+ 
+ 
+ **Dropping the second predictor:**
+ 
+```{r}
+mod_IMDB_bwd = lm(imdb_rating ~ title_type +genre + runtime + mpaa_rating + thtr_rel_year + dvd_rel_year + dvd_rel_month + dvd_rel_day + imdb_num_votes + best_pic_nom + best_pic_win + best_actor_win + best_actress_win + best_dir_win + top200_box, data = tab_mod_IMDB)
+summary(mod_IMDB_bwd)$adj.r.squared
+```
+
+Here, we removed the predictor `thtr_rel_day`.
+
+
+
+**Dropping the third predictor:**
+
+```{r}
+mod_IMDB_bwd = lm(imdb_rating ~ title_type +genre + runtime + mpaa_rating + thtr_rel_year + dvd_rel_year + dvd_rel_month +  imdb_num_votes + best_pic_nom + best_pic_win + best_actor_win + best_actress_win + best_dir_win + top200_box, data = tab_mod_IMDB)
+summary(mod_IMDB_bwd)$adj.r.squared
+```
+
+Here, we removed the predictor `dvd_rel_day`.
+
+
+
+**Dropping the fourth predictor:**
+
+```{r}
+mod_IMDB_bwd = lm(imdb_rating ~ title_type +genre + runtime + mpaa_rating + thtr_rel_year + dvd_rel_year + dvd_rel_month +  imdb_num_votes + best_pic_nom + best_pic_win +  best_actress_win + best_dir_win + top200_box, data = tab_mod_IMDB)
+summary(mod_IMDB_bwd)$adj.r.squared
+```
+
+Here, we removed the predictor `best_actor_Win`.
+
+
+
+**Dropping the fifth predictor:**
+
+```{r}
+mod_IMDB_bwd = lm(imdb_rating ~ title_type +genre + runtime + mpaa_rating + thtr_rel_year + dvd_rel_year + dvd_rel_month +  imdb_num_votes + best_pic_nom + best_pic_win  + best_dir_win + top200_box, data = tab_mod_IMDB)
+summary(mod_IMDB_bwd)$adj.r.squared
+```
+
+Here, we removed the predictor `best_actress_win`.
+
+
+
+**Dropping the sixth predictor:**
+
+```{r}
+mod_IMDB_bwd = lm(imdb_rating ~ title_type +genre + runtime + mpaa_rating + thtr_rel_year + dvd_rel_year + dvd_rel_month +  imdb_num_votes + best_pic_nom + best_pic_win  + best_dir_win , data = tab_mod_IMDB)
+summary(mod_IMDB_bwd)$adj.r.squared
+```
+
+Here, we removed the predictor `top200_box`.
+
+On testing again from the beginning we find that dropping no other predictors would result in a better value for adjusted R squared. Therefore, we stop here. The final maximized value of the adjusted R squared for our model above, arrived at by using the technique of backward elimination is 0.414 approximately. 
+
+We dropped 6 predictors (`thtr_rel_month`, `thtr_rel_day`, `dvd_rel_day`, `best_actor_Win`, `best_actress_win`, `top200_box`) and are currently left with 11 predictors in our model. 
+
+Let us now move ahead with the technique of forward selection. 
+
+
+
+
+##### Modelling using forward selection: 
+
+
+
+
+In the method of modelling using forward selection, we start with an empty model and then add predictors that increases the value of adjusted R squared successively. 
+
+
+
+**Adding the first predictor:**
+
+```{r}
+mod_IMDB_fwd = lm(imdb_rating ~ title_type, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~ genre, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~ runtime, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~ mpaa_rating, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~ thtr_rel_year , data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~ thtr_rel_month, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~ thtr_rel_day, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~ dvd_rel_year, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~dvd_rel_month, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~ dvd_rel_day, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~ imdb_num_votes, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~ best_pic_nom, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~ best_pic_win, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~best_actor_win, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~ best_actress_win, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~ best_dir_win, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+mod_IMDB_fwd = lm(imdb_rating ~ top200_box, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+
+```
+
+Here, we can see the maximum adjusted R squared value is 0.21604 which corresponds to the predictor `genre`. Hence, the first predictor that we add to our model is `genre`. 
+Similarly, we are going to test and add the other successive explanatory variables.
+
+
+
+**Adding the second predictor:**
+
+After testing we find the predictor `imdb_num_votes` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_IMDB_fwd = lm(imdb_rating ~ genre + imdb_num_votes, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+```
+
+
+
+**Adding the third predictor:**
+
+After testing we find the predictor `thtr_rel_year` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_IMDB_fwd = lm(imdb_rating ~ genre + imdb_num_votes + thtr_rel_year , data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+```
+
+
+
+**Adding the fourth predictor:**
+
+After testing we find the predictor `mpaa_rating` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_IMDB_fwd = lm(imdb_rating ~ genre + imdb_num_votes + thtr_rel_year + mpaa_rating, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+```
+
+
+
+**Adding the fifth predictor:**
+
+After testing we find the predictor `runtime` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_IMDB_fwd = lm(imdb_rating ~ genre + imdb_num_votes + thtr_rel_year + mpaa_rating + runtime, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+```
+
+
+
+**Adding the sixth predictor:**
+
+After testing we find the predictor `title_type` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_IMDB_fwd = lm(imdb_rating ~ genre + imdb_num_votes + thtr_rel_year + mpaa_rating + runtime + title_type, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+
+```
+
+
+
+**Adding the seventh predictor:**
+
+After testing we find the predictor `best_pic_nom` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_IMDB_fwd = lm(imdb_rating ~ genre + imdb_num_votes + thtr_rel_year + mpaa_rating + runtime + title_type + best_pic_nom, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+```
+
+
+
+**Adding the eighth predictor:**
+
+After testing we find the predictor `best_pic_win` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_IMDB_fwd = lm(imdb_rating ~ genre + imdb_num_votes + thtr_rel_year + mpaa_rating + runtime + title_type + best_pic_nom + best_pic_win, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+```
+
+
+
+**Adding the ninth predictor:**
+
+After testing we find the predictor `best_dir_win` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_IMDB_fwd = lm(imdb_rating ~ genre + imdb_num_votes + thtr_rel_year + mpaa_rating + runtime + title_type + best_pic_nom + best_pic_win + best_dir_win, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+```
+
+
+
+**Adding the tenth predictor:**
+
+After testing we find the predictor `dvd_rel_month` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_IMDB_fwd = lm(imdb_rating ~ genre + imdb_num_votes + thtr_rel_year + mpaa_rating + runtime + title_type + best_pic_nom + best_pic_win + best_dir_win + dvd_rel_month, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+```
+
+
+
+**Adding the eleventh predictor:**
+
+After testing we find the predictor `dvd_rel_year` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_IMDB_fwd = lm(imdb_rating ~ genre + imdb_num_votes + thtr_rel_year + mpaa_rating + runtime + title_type + best_pic_nom + best_pic_win + best_dir_win + dvd_rel_month + dvd_rel_year, data = tab_mod_IMDB)
+summary(mod_IMDB_fwd)$adj.r.squared
+```
+
+
+
+
+On trying to add the twelfth predictor we find that the value of adjusted R squared decreases from 0.414 to 0.413 for every predictor that is left. Thus, we stop here with addition and select our model with the following predictors:
+`genre`, `imdb_num_votes`, `thtr_rel_year`, `mpaa_rating`, `runtime`, `title_type`, `best_pic_nom`, `best_pic_win`, `best_dir_win`, `dvd_rel_month`, `dvd_rel_year`.
+
+
+
+##### Final model for predicting IMDB ratings: 
+
+
+
+It will be interesting to note that both the methods of model selection- backward elimination and forward selection yielded in the same model with the exact same value of adjusted R squared. 
+
+The final model is: 
+
+imdb_rating = $\beta_0$+ $\beta_1$genre: Action & Adventure + $\beta_2$imdb_num_votes + $\beta_3$thtr_rel_year: 0 + $\beta_4$mpaa_rating: G + $\beta_5$runtime + $\beta_6$title_type: Documentary + $\beta_7$best_pic_nom: no + $\beta_8$best_pic_win: no + $\beta_9$best_dir_win: no + $\beta_{10}$dvd_rel_month: April + $\beta_{11}$dvd_rel_year: 0
+    
+Let us store the same model in a separate object:
+
+```{r}
+mod_IMDB = mod_IMDB_fwd #Since, both the models are same, we need not worry about which model we select as the final model. Here, we are using the model we got from forward selection.
+```
+
+
+
+
+#### Interpreting the regression parameters of our IMDB model:
+
+
+We can view the matrix of the co-efficients of our model to view the slopes($\beta_i$'s), the intercept and other parameters by using the `coef()` function along with the summary of our model:
+
+```{r}
+coef(summary(mod_IMDB))
+```
+
+#####Interpretting the intercept:
+
+*Action & Adventure, Documetary* movies with *0 votes on IMDB*, being *released both in the theatre and in form of a DVD (in the month of April) in the year 0*, having the rating *G by MPAA*, with *0 runtime minutes* and *no best picture nomination nor best picture & best director award in Oscar* will recieve an IMDB rating of *53.6 / 10* points. 
+
+The above interpretation is obviously meaningless especially because the IMDB ratings can only range from 0-10. Also, it makes no sense to have a movie with 0 runtime being released in the year 0. 
+
+This intercept thus, only helps us to get and adjust the height at which our model will intersect the y-axis if plotted on a graph. 
+
+
+#####Interpretting the slopes:**
+
+**For genre:**
+*Reference level: Action & Adventure*
+
+
+- Animation: All else held constant, *Animation* movies get *0.13* points lesser on IMDB than Action & Adventure films. 
+
+- Art House & International: All else held constant, *Art House & International* movies get *0.99* points more on IMDB than Action & Adventure films.
+
+- Comedy: All else held constant, *Comedy* movies get *0.01* points lesser on IMDB than Action & Adventure films.
+                    
+- Documentary: All else held constant, *Documentary* movies get *0.99* points more on IMDB than Action & Adventure films.
+               
+- Drama: All else held constant, *Drama* movies get *0.73* points more on IMDB than Action & Adventure films.
+                      
+- Horror: All else held constant, *Horror* movies get *0.04* points lesser on IMDB than Action & Adventure films.
+                    
+- Musical & Performing Arts: All else held constant, *Musical & Performing Arts* movies get *1.14* points more on IMDB than Action & Adventure films.
+  
+- Mystery & Suspense: All else held constant, *Mystery & Suspense* movies get *0.47* points more on IMDB than Action & Adventure films.
+         
+- Other: All else held constant, *Other* movies get *0.35* points more on IMDB than Action & Adventure films.
+                      
+- Science Fiction & Fantasy: All else held constant, *Science Fiction & Fantasy* movies get *0.09* points lesser on IMDB than Action & Adventure films.
+ 
+ 
+**For IMDB number of votes**
+
+All else held constant, for each unit increase in the number of votes on IMDB the ratings go up by *3.568918e-06* points. 
+
+
+**For MPAA ratings:**
+*Reference level: G*
+
+
+- NC-17: All else held constant, *NC-17* movies get *0.48* points lesser on IMDB than G films.
+
+- PG: All else held constant, *PG7* movies get *0.5* points lesser on IMDB than G films.
+
+- PG-13: All else held constant, *PG-13* movies get *0.75* points lesser on IMDB than G films.
+
+- R: All else held constant, *R* movies get *0.47* points lesser on IMDB than G films. 
+
+- Unrated: All else held constant, *Unrated* movies get *0.13* points lesser on IMDB than G films.
+
+
+**For runtime:**
+
+All else held constant for every minute increase in the runtime of a film the IMDB rating goes up by *4.75e-03* points.
+
+**For title type:**
+*Reference level: Documentary*
+
+- Featur film: All else held constant, *feature* movies get *0.89* points lesser on IMDB than Documentary films.
+
+- TV movie: All else held constant, *TV* movies get *1.36* points lesser on IMDB than Documentary films.
+
+**For best picture nomination:**
+
+All else held constant, movies that *get nominated for the best picture award in Oscar* get *0.53* points *more* on IMDB than movies that don't get nominated for the same.
+
+**For best picture win:**
+
+All else held constant, movies that *win best picture award in Oscar* get *0.65* points *less* on IMDB than movies that don't get win the same.
+
+**For best director win:**
+
+All else held constant, movies that *win the best director award in Oscar* get *0.26* points more on IMDB than movies that don't win the same.
+
+
+#### Inference for our IMDB model:
+
+Let us state our hypotheses for testing our model: 
+
+$H_0$: There is nothing going on with our model and the same has no predictive power at all. Mathematically, the NULL hypothesis states:
+
+$$H_0: \beta_1 = \beta_2 = ... = \beta_{11}$$
+
+$H_A$: At least on of the $\beta_i$ is non-zero.
+
+Let us view the summary again to make the valid inferences for our model:
+```{r}
+summary(mod_IMDB)
+```
+
+
+Looking at the p-value above, we find that it is definitely less than 0.05, so we reject our NULL hypothesis in favour of the alternative. This, in essence, means our model as a whole is *significant* and there is something going on with it. This claim is also supported by the significant value of the F-statistic that we have got.
+Thus, we can say that with the help of our model, we can successfully predict the IMDB ratings of a given film.
+
+
+
+#### Diagnostics for our IMDB model:
+
+
+Now, that we've dropped many variables from our dataframe that included all the potential predictors for IMDB rating for our model, let us also keep only the selected predictors in the same.
+
+Viewing all the variables in the *tab_mod_IMDB* dataframe: 
+
+```{r}
+names(tab_mod_IMDB)
+```
+
+Dropping those that are absent from our model:
+
+```{r}
+tab_mod_IMDB <- tab_mod_IMDB[, c(1,2,3,4,5,6,9,10,12,13,14,17)]
+names(tab_mod_IMDB)
+```
+
+For running the diagnostics, we are only interested in numberical explanatory variables. 
+In our model we have two explanatory variable and they are `imdb_num_votes` and `runtime`. 
+
+
+
+
+**Checking for linear relationship:**
+
+We are going to use the residual plot for finding out if or not there exists a linear relationship between `imdb_num_votes` and `imdb_rating`.
+
+
+
+*Checking for linear relationship between IMDB ratings and IMDB number of votes:*
+
+
+
+```{r}
+plot(mod_IMDB$residuals ~ tab_mod_IMDB$imdb_num_votes, col = "#FC4E07", main = "IMDB number of votes V/S Residuals", pch = 18, xlab = "IMDB number of votes", ylab = "Residuals")
+abline(lm(mod_IMDB$residuals ~ tab_mod_IMDB$imdb_num_votes), col = "brown")
+```
+
+
+The scatter plot above does not look random. It more or less shows a negative trend as the value of `imdb_num_votes` increases. However, the spread does seem to be centred at 0. 
+If we observe the above plot well enough, we'll notice a cluster in the left most part of the plot till approximately 0.1M number of IMDB votes. This seems like a reasonable output. Not every movie would be watched and voted by so many voters. The movies either have to be old or exceptionally great. 
+We might be interested to know what is actually happening in that cluster- if the points show any trend or are they just randomly scattered?
+Note: Here, we are trying to re-scale our data and view parts of the spread  one at a time, to check for randomness within it. 
+
+```{r}
+par(mfrow = c(2,2))
+
+plot(mod_IMDB$residuals ~ tab_mod_IMDB$imdb_num_votes, xlim = c(0,50000), col = "#00AFBB", pch = 18, xlab = "IMDB votes up to 50000", ylab = "Residuals")
+abline(lm(mod_IMDB$residuals ~ tab_mod_IMDB$imdb_num_votes), col = "brown")
+
+plot(mod_IMDB$residuals ~ tab_mod_IMDB$imdb_num_votes, xlim = c(50000, 100000), col = "#FC4E07", pch = 18, xlab = "IMDB votes: 50000 to 100000", ylab = "Residuals")
+abline(lm(mod_IMDB$residuals ~ tab_mod_IMDB$imdb_num_votes), col = "brown")
+
+plot(mod_IMDB$residuals ~ tab_mod_IMDB$imdb_num_votes, xlim = c(100000,400000), col = "#E7B800", pch = 18, xlab = "IMDB votes: 100000 to 400000", ylab = "Residuals")
+abline(lm(mod_IMDB$residuals ~ tab_mod_IMDB$imdb_num_votes), col = "brown")
+
+plot(mod_IMDB$residuals ~ tab_mod_IMDB$imdb_num_votes, xlim = c(400000,800000), col = "#0000CC", pch = 18, xlab = "IMDB votes: 400000 to 800000", ylab = "Residuals")
+abline(lm(mod_IMDB$residuals ~ tab_mod_IMDB$imdb_num_votes), col = "brown")
+```
+
+If we see the above plots we can say that the IMDB number of votes v/s the residuals plot is random and almost fairly centred at 0.
+Now, this satisfies our condition for linearity. 
+
+
+
+*Checking for linear relationship between IMDB ratings and runtime:*
+
+
+
+```{r}
+plot(mod_IMDB$residuals ~ tab_mod_IMDB$runtime, col = "#FC4E07", main = "Runtime of films V/S Residuals", pch = 18, xlab = "Runtime of films (in mins)", ylab = "Residuals")
+abline(lm(mod_IMDB$residuals ~ tab_mod_IMDB$runtime), col = "brown")
+```
+
+As before, here again, we find a significant cluster of points till 150 minutes of runtime with the spread being centred at 0. This is also not very surprising as movies mostly last for 120 to 180 minutes in general. 
+Let us again rescale our spread to view parts of it for finding out any trends inside the cluster and even beyond it:
+
+```{r}
+par(mfrow= c(2,2))
+
+plot(mod_IMDB$residuals ~ tab_mod_IMDB$runtime, col = "orange", main = "Runtime of films V/S Residuals", pch = 18, xlab = "Runtime up to 80 mins.", ylab = "Residuals", xlim = c(37,80))
+abline(lm(mod_IMDB$residuals ~ tab_mod_IMDB$runtime), col = "brown")
+
+plot(mod_IMDB$residuals ~ tab_mod_IMDB$runtime, col = "cyan", main = "Runtime of films V/S Residuals", pch = 18, xlab = "Runtime from 80 to 100 mins", ylab = "Residuals", xlim = c(80,100))
+abline(lm(mod_IMDB$residuals ~ tab_mod_IMDB$runtime), col = "brown")
+
+plot(mod_IMDB$residuals ~ tab_mod_IMDB$runtime, col = "magenta", main = "Runtime of films V/S Residuals", pch = 18, xlab = "Runtime from 100 to 150 mins", ylab = "Residuals", xlim = c(100,150))
+abline(lm(mod_IMDB$residuals ~ tab_mod_IMDB$runtime), col = "brown")
+
+plot(mod_IMDB$residuals ~ tab_mod_IMDB$runtime, col = "green", main = "Runtime of films V/S Residuals", pch = 18, xlab = "Runtime from 150 to 280 mins", ylab = "Residuals", xlim = c(150,275))
+abline(lm(mod_IMDB$residuals ~ tab_mod_IMDB$runtime), col = "brown")
+```
+
+In all the abaove four plots, we find that the residuals are randomly scattered and is roughly centred at 0. 
+This, thus proves that our condition for linearity between the residuals and the runtime is satisfied. 
+
+
+
+
+**Checking for nearly normal residuals:**
+
+
+
+We can check for the normality of the residuals using a historgram and a normal probability plot. 
+
+```{r}
+par(mfrow = c(1,2))
+
+hist(mod_IMDB$residuals, col = "orange", xlab = "Residuals", main = "Histogram of residuals")
+
+qqnorm(mod_IMDB$residuals, col = "#FC4E07", pch = 18)
+qqline(mod_IMDB$residuals, col = "blue")
+```
+
+
+From the histogram we find that there does exist a slight left skew in the residuals which also seems to be centred at 0. 
+From the normarl probability plot we can see that skew is actually not that bad. There's in fact, no deviation anywhere except for the tail areas. 
+
+Thus, we can say our condition for normal residuals is fairly met. 
+
+
+
+
+**Checking for constant variability of the residuals:**
+
+
+
+For checking this condition we are going to plot our fitted values against the residuals and see for a random scatter plot, in essesnce nothing like fan shaped plot.
+
+```{r}
+grid1 <- matrix(c(1, 2), nrow = 2, ncol = 1, byrow = F)
+
+g1_cell1 <- ggplot(data = mod_IMDB, aes(x = mod_IMDB$fitted.values, y = mod_IMDB$residuals, color = mod_IMDB$fitted))+
+  geom_jitter()+
+  geom_smooth(method = "lm")
+
+g1_cell2 <- ggplot(mod_IMDB)+
+  geom_point(aes(x = mod_IMDB$fitted.values, y = abs(mod_IMDB$residuals)), col = "deeppink1", pch = 18)
+
+grid.arrange(g1_cell1 + labs(x = "Fitted values", y = "Residuals"), g1_cell2 + labs(x = "Fitted values", y = "Absolute residuals"), ncol = 1)
+```
+
+
+In the first plot (on the top panel) we see nothing like a fan shaped. In fact, the residuals seem to spread randomly centred at 0. The same observation is reflected in the second plot (on the bottom panel) where we have the absolute values of residuals plotted against the fitted values. If there were any such interesting happenings to observe, we would be expected to find a triangle which definitely is not the case here. 
+Hence, we can conclude that our model satisfies the condition of having constant variability. 
+
+
+
+
+**Checking for independent residuals:**
+
+
+
+By checking this condition what we are actually trying to find out is if our not the data we have collected is really independent. 
+The movies were randomly sampled, we know, but, because they also have parameters like release year, we may suspect our data to have an structure of time series. In order to ensure that independence, let us check the residuals v/s order of data collection plot. 
+For this, we simply need to plot the residuals.
+
+```{r}
+plot(mod_IMDB$residuals, col = "sky blue", pch = 18, ylab = "Residuals", xlab = "Index in order of data collection")
+abline(lm(mod_IMDB$residuals ~ 1), col = "brown")
+```
+
+Looking at the above plot we can be ceratin about two things- first, the residuals are pretty randomly scattered and second, the spread is centred at 0. 
+This helps us ascertain the data collected has no time series structure and are independent of each other. 
+
+
+
+
+Now, that we are sure about all the four conditions being faily met for the diagnostics, we can say that our model is a valid Multiple Linear Regression model. 
+
+
+
+
+
+###Dfining a model for critics score on Rotten Tomatoes for a movie.
+
+
+
+#### Dropping Variables:
+
+
+Just as in the case of defining aN MLR model for predicting the IMDB ratings of movies, we are going to start modelling using the technique of *backward elimination* followed by *forward selection* and then choose the model with the highest value of adjusted R squared.
+Thus, let us view the variables given to us by the *movies* dataset again, to get an idea about the variables that we need to drop for beginning with the full model.
+
+```{r}
+names(movies)
+```
+
+Out of the now, 34 variables the following are the set of variables that we may want to drop before creating our full model:
+
+- `title`, `director`, `actor1`, `actor2`, `actor3`, `actor4`, `actor5`, `studio` - These variables have a lot of levels which may not be useful to us. Some people might have a favourite actor or director and may be biased while casting their votes. But, again, we cannot miss the fact their may be many favourite actors or directors and our model cannot take account of them all. 
+
+- `imdb_rating`, `imdb_num_votes` - All these variables are associated with IMDB. Now, the ratings on Rotten Tomatoes should ideally be independent of ratings on any other similar website like IMDB. Hence, like in the previous model we had omitted variables being associated with Rotten Tomatoes for ensuring independence for predicting IMDB ratings, here, we are going to ommit the above variables for the same reason for pridicting the critics scoring.
+
+- `imdb_url`, `rt_url` - Absolutely meaningless to include the URLS of the movies on either of the websites.
+
+- `mpaa_rev`, `for_underage` - These variables are derived from the variable `mpaa_rating` and will obviously have some degree of collinearity associated with the same. 
+
+
+
+
+#### Beginning with modelling:
+
+
+Let us create a dataframe with the variables we have chosen as potent pridictors for our model.
+
+```{r}
+tab_mod_RT <- movies%>%
+  filter(!is.na(title_type), !is.na(genre), !is.na(runtime), !is.na(mpaa_rating), !is.na(thtr_rel_year), !is.na(thtr_rel_month), !is.na(thtr_rel_day), !is.na(dvd_rel_year), !is.na(dvd_rel_month), !is.na(dvd_rel_day), !is.na(best_pic_nom), !is.na(best_pic_win), !is.na(best_actor_win), !is.na(best_actress_win), !is.na(best_dir_win), !is.na(top200_box), !is.na(critics_rating), !is.na(critics_score), !is.na(audience_rating), !is.na(audience_score)) %>%
+  select(critics_score, critics_rating, audience_rating, audience_score, title_type, genre , runtime , mpaa_rating , thtr_rel_year , thtr_rel_month , thtr_rel_day , dvd_rel_year , dvd_rel_month , dvd_rel_day , best_pic_nom , best_pic_win , best_actor_win , best_actress_win , best_dir_win , top200_box)
+ 
+```
+
+
+
+
+##### Modelling using backward elimination: 
+
+
+
+
+For backward elimination we are needed to begin with a full model. In our case, the full model is going to include all the variables present in the dataframe (*tab_mod_RT*) we just created above. For simplicity purpose, we are only going to extract the adjusted R squared value for every model we define after successive drop of predictors. 
+
+
+
+**Full model**:
+
+```{r}
+mod_RT_bwd = lm(critics_score ~ critics_rating + audience_rating + audience_score + title_type+ genre + runtime + mpaa_rating + thtr_rel_year + thtr_rel_month + thtr_rel_day + dvd_rel_year + dvd_rel_month + dvd_rel_day + best_pic_nom + best_pic_win + best_actor_win + best_actress_win + best_dir_win + top200_box, data = tab_mod_RT)
+summary(mod_RT_bwd)$adj.r.squared
+```
+
+To start with our full model already has a brilliant adjusted R squared. Let us however, try to find out if dropping more predictors will help us yield a better model with a greater value of adjusted R squared.
+
+
+
+**Dropping the first predictor:**
+
+```{r}
+mod_RT_bwd = lm(critics_score ~ critics_rating + audience_rating + audience_score + title_type+ genre + runtime + mpaa_rating + thtr_rel_year + thtr_rel_day + dvd_rel_year + dvd_rel_month + dvd_rel_day + best_pic_nom + best_pic_win + best_actor_win + best_actress_win + best_dir_win + top200_box, data = tab_mod_RT)
+summary(mod_RT_bwd)$adj.r.squared
+```
+
+Here, we have removed the predictor `thtr_rel_month`. 
+
+
+
+**Dropping the second predictor:**
+
+```{r}
+mod_RT_bwd = lm(critics_score ~ critics_rating + audience_rating + audience_score + title_type+ genre + runtime + mpaa_rating + thtr_rel_year + dvd_rel_year + dvd_rel_month + dvd_rel_day + best_pic_nom + best_pic_win + best_actor_win + best_actress_win + best_dir_win + top200_box, data = tab_mod_RT)
+summary(mod_RT_bwd)$adj.r.squared
+```
+
+Here, we have removed the predictor `thtr_rel_day`. 
+
+
+
+**Dropping the third predictor:**
+
+```{r}
+mod_RT_bwd = lm(critics_score ~ critics_rating + audience_rating + audience_score + title_type+ genre + runtime + mpaa_rating + thtr_rel_year + dvd_rel_year + dvd_rel_day + best_pic_nom + best_pic_win + best_actor_win + best_actress_win + best_dir_win + top200_box, data = tab_mod_RT)
+summary(mod_RT_bwd)$adj.r.squared
+```
+
+Here, we have removed the predictor `dvd_rel_month`. 
+
+
+
+**Dropping the fourth predictor:**
+
+```{r}
+mod_RT_bwd = lm(critics_score ~ critics_rating + audience_rating + audience_score + title_type+ genre + runtime + mpaa_rating + thtr_rel_year + dvd_rel_year + dvd_rel_day + best_pic_win + best_actor_win + best_actress_win + best_dir_win + top200_box, data = tab_mod_RT)
+summary(mod_RT_bwd)$adj.r.squared
+```
+
+Here, we have removed the predictor `best_pic_nom`. 
+
+
+
+**Dropping the fifth predictor:**
+
+```{r}
+mod_RT_bwd = lm(critics_score ~ critics_rating + audience_rating + audience_score + title_type+ genre + runtime + mpaa_rating + thtr_rel_year + dvd_rel_year + dvd_rel_day + best_actor_win + best_actress_win + best_dir_win + top200_box, data = tab_mod_RT)
+summary(mod_RT_bwd)$adj.r.squared
+```
+
+Here, we have removed the predictor `best_pic_win `.
+
+
+
+**Dropping the sixth predictor:**
+
+```{r}
+mod_RT_bwd = lm(critics_score ~ critics_rating + audience_rating + audience_score + title_type+ genre + runtime + mpaa_rating + thtr_rel_year + dvd_rel_year + dvd_rel_day + best_actress_win + best_dir_win + top200_box, data = tab_mod_RT)
+summary(mod_RT_bwd)$adj.r.squared
+```
+
+Here, we have removed the predictor ` best_actor_win `. 
+
+
+
+**Dropping the seventh predictor:**
+
+```{r}
+mod_RT_bwd = lm(critics_score ~ critics_rating + audience_rating + audience_score + title_type+ genre + runtime + mpaa_rating + thtr_rel_year + dvd_rel_year + dvd_rel_day + best_actress_win  + top200_box, data = tab_mod_RT)
+summary(mod_RT_bwd)$adj.r.squared
+```
+
+Here, we have removed the predictor ` best_dir_win`.
+
+
+
+**Dropping the eighth predictor:**
+
+```{r}
+mod_RT_bwd = lm(critics_score ~ critics_rating + audience_rating + audience_score + title_type+ genre + runtime + mpaa_rating + thtr_rel_year + dvd_rel_year + dvd_rel_day + best_actress_win, data = tab_mod_RT)
+summary(mod_RT_bwd)$adj.r.squared
+```
+
+Here, we removed the predictor `top200_box`.
+
+
+
+**Dropping the ninth predictor:**
+
+In order to achieve a more parcimonious model, we can try removing predictors again from the beginning to check if a new combination is elvoved with a better adjusted R squared value.
+
+```{r}
+mod_RT_bwd = lm(critics_score ~ critics_rating + audience_rating + audience_score + title_type+ genre + runtime + mpaa_rating + thtr_rel_year + dvd_rel_day + best_actress_win, data = tab_mod_RT)
+summary(mod_RT_bwd)$adj.r.squared
+```
+
+The adjusted R squared increased from 0.8298585 to 0.8298736 when we removed the predictor `dvd_rel_year`.
+
+
+On testing again we find that dropping no other predictors would result in a better value for adjusted R squared. Therefore, we stop here. The final maximized value of the adjusted R squared for our model above, arrived at by using the technique of backward elimination is 0.830 approximately. 
+
+We dropped 9 predictors (`thtr_rel_month`, `thtr_rel_day`, `dvd_rel_month`, `best_pic_nom`, `best_pic_win`, `best_actor_Win`, `best_dir_win`, `top200_box`, `dvd_rel_year`) and are currently left with 10 predictors in our model. 
+
+Let us now move ahead with the technique of forward selection. 
+
+
+
+
+##### Modelling using forward selection: 
+
+
+
+
+In the method of modelling using forward selection, we start with an empty model and then add predictors that increases the value of adjusted R squared successively. 
+
+
+
+**Adding the first predictor:**
+
+```{r}
+mod_RT_fwd = lm(critics_score~ critics_rating, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ audience_rating, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ audience_score, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ title_type, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ genre, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ runtime, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ mpaa_rating, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ thtr_rel_year, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ thtr_rel_month, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ thtr_rel_day, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ dvd_rel_year, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ dvd_rel_month, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ best_dir_win, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ best_pic_nom, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ best_pic_win, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ best_actor_win, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ best_actress_win, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ best_dir_win, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+mod_RT_fwd = lm(critics_score~ top200_box, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+```
+
+Here, we can see the maximum adjusted R squared value is 0.7733201 which corresponds to the predictor `critics_rating`. Hence, the first predictor that we add to our model is `critics_rating`. 
+Similarly, we are going to test and add the other successive explanatory variables.
+
+
+
+**Adding the second predictor:**
+
+After testing we find the predictor `audience_score` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_RT_fwd = lm(critics_score~ critics_rating + audience_score, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+```
+
+
+
+**Adding the third predictor:**
+
+After testing we find the predictor `genre` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_RT_fwd = lm(critics_score~ critics_rating + audience_score + genre, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+```
+
+
+
+**Adding the fourth predictor:**
+
+After testing we find the predictor `thtr_rel_year` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_RT_fwd = lm(critics_score~ critics_rating + audience_score + genre + thtr_rel_year, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+```
+
+
+
+**Adding the fifth predictor:**
+
+After testing we find the predictor `title_type` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_RT_fwd = lm(critics_score~ critics_rating + audience_score + genre + thtr_rel_year + title_type, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+```
+
+
+
+**Adding the sixth predictor:**
+
+After testing we find the predictor `audience_rating` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_RT_fwd = lm(critics_score~ critics_rating + audience_score + genre + thtr_rel_year + title_type + audience_rating, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+```
+
+
+
+**Adding the seventh predictor:**
+
+After testing we find the predictor `mpaa_rating` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_RT_fwd = lm(critics_score~ critics_rating + audience_score + genre + thtr_rel_year + title_type + audience_rating + mpaa_rating, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+```
+
+
+
+**Adding the eighth predictor:**
+
+After testing we find the predictor `runtime` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_RT_fwd = lm(critics_score~ critics_rating + audience_score + genre + thtr_rel_year + title_type + audience_rating + mpaa_rating + runtime, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+```
+
+
+
+**Adding the ninth predictor:**
+
+After testing we find the predictor `best_actress_win` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_RT_fwd = lm(critics_score~ critics_rating + audience_score + genre + thtr_rel_year + title_type + audience_rating + mpaa_rating + runtime + best_actress_win, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+```
+
+
+
+**Adding the tenth predictor:**
+
+After testing we find the predictor `dvd_rel_year` results in the maximum value of adjusted R squared. Hence, we add it to our model.
+
+```{r}
+mod_RT_fwd = lm(critics_score~ critics_rating + audience_score + genre + thtr_rel_year + title_type + audience_rating + mpaa_rating + runtime + best_actress_win + dvd_rel_year, data = tab_mod_RT)
+summary(mod_RT_fwd)$adj.r.squared
+```
+
+
+
+
+
+
+
+On trying to add the tenth predictor we find that the value of adjusted R squared decreases from 0.8298499 to below 0.829 for every predictor that is left. Thus, we stop here with addition and select our model with the following predictors:
+`critics_rating`, `audience_score`, `genre`, `thtr_rel_year`, `title_type`, `audience_rating`, `mpaa_rating`, `runtime`, `best_actress_win` and `dvd_rel_year`.
+
+
+
+
+##### Final model for predicting Critic's score on Rotten Tomatoes: 
+
+
+
+The value of adjusted R squared that we got from backward elimination is 0.8298736 with 10 pridictors while the value of adjusted R squared that forward selection resulted in is 0.8298499 with 10 predictors, as well.
+The only different variable in both the models are `dvd_rel_year` (in the model obtained from forward selection) and `dvd_rel_day` (in the model obtained from backward elimination). 
+Thus, we are going to choose the model obtained from backward elimination as our final model.
+The model for predicting critics scoring looks like: 
+
+critics_score = $\beta_0$+ $\beta_1$critics_rating + $\beta_2$audience_rating + $\beta_3$audience_score + $\beta_4$title_type + $\beta_5$genre + $\beta_6$runtime + $\beta_7$mpaa_rating + $\beta_8$thtr_rel_year + $\beta_9$dvd_rel_day + $\beta_{10}$best_actress_win
+    
+Let us store the same model in a separate object:
+
+```{r}
+mod_RT = mod_RT_bwd 
+```
+
+
+
+
+
+#### Interpreting the regression parameters of our Critic's score on Rotten Tomatoes model:
+
+
+We can view the matrix of the co-efficients of our model to view the slopes($\beta_i$'s), the intercept and other parameters by using the `coef()` function along with the summary of our model:
+
+```{r}
+coef(summary(mod_RT))
+```
+
+#####Interpretting the intercept:
+
+*Action & Adventure, Documetary* movies being rated as *Certified Fresh* by the critics & *Spilled* by the audience and *0 audience score* on Rotten Tomatoes, being *released in theatres in year 0*, having the rating *G by MPAA*, with *0 runtime minutes* and *no best actress award in Oscar* will recieve a critics score of 318% on Rotten Tomatoes. 
+
+The above interpretation is absolutley meaningless especially because the critics score are given in percentages and can only range from 0% - 100%. Also, it makes no sense to have a movie with 0 runtime being released in the year 0. 
+
+This intercept thus, only helps us to get and adjust the height at which our model will intersect the y-axis if plotted on a graph. 
+
+
+#####Interpretting the slopes:
+
+
+**For critics ratings:**
+*Reference level: Certified Fresh*
+
+- Fresh: All else held constant, movies that are rated *Fresh* get *7.67%* lesser than the movies that are rated Certified Fresh by the critics on Rotten Tomatoes.
+
+- Rotten: All else held constant, movies that are rated *Rotten* get *43.55%* lesser than the movies that are rated Certified Fresh by the critics on Rotten Tomatoes.
+ 
+ 
+**For audience ratings:**
+*Reference level: Spilled*
+
+- Upright: All else held constant, movies that are rated *Upright* get *4.12%* lesser than the movies that are rated Spilled by the audience on Rotten Tomatoes.
+
+
+**For audience score:**
+
+All else held constant, for each *1%* increase in the audience score the critics score on Rotten Tomatoes goes up by *0.41%*.
+
+
+**For title type:**
+*Reference level: Documentary*
+
+- Featur film: All else held constant, *feature* movies get *12.48%* lesser critic's score on Rotten Tomatoes than Documentary films.
+
+- TV movie: All else held constant, *TV* movies get *10.18* lesser critic's score on Rotten Tomatoes than Documentary films.
+
+**For genre:**
+*Reference level: Action & Adventure*
+
+
+- Animation: All else held constant, *Animation* movies get *4.22%* lesser critic's score on Rotten Tomatoes than Action & Adventure films. 
+
+- Art House & International: All else held constant, *Art House & International* movies get *2.67%* lesser critic's score on Rotten Tomatoes than Action & Adventure films. 
+
+- Comedy: All else held constant, *Comedy* movies get *0.07%* more critic's score on Rotten Tomatoes than Action & Adventure films. 
+                    
+- Documentary: All else held constant, *Documentary* movies get *3.22%* lesser critic's score on Rotten Tomatoes than Action & Adventure films. 
+               
+- Drama: All else held constant, *Drama* movies get *4.28%* more critic's score on Rotten Tomatoes than Action & Adventure films. 
+                      
+- Horror: All else held constant, *Horror* movies get *4.06%* more critic's score on Rotten Tomatoes than Action & Adventure films. 
+                    
+- Musical & Performing Arts: All else held constant, *Musical & Performing Arts* movies get *2.92%* more critic's score on Rotten Tomatoes than Action & Adventure films. 
+  
+- Mystery & Suspense: All else held constant, *Mystery & Suspense* movies get *4.13%* more critic's score on Rotten Tomatoes than Action & Adventure films. 
+         
+- Other: All else held constant, *Other* movies get *1.57%* more critic's score on Rotten Tomatoes than Action & Adventure films. 
+                      
+- Science Fiction & Fantasy: All else held constant, *Science Fiction & Fantasy* movies get *1.36%* lesser critic's score on Rotten Tomatoes than Action & Adventure films. 
+
+
+**For runtime:**
+
+All else held constant for every minute increase in the runtime of a film the critic's score on Rotten Tomatoes goes up by *0.05%*.
+
+
+**For MPAA ratings:**
+*Reference level: G*
+
+
+- NC-17: All else held constant, *NC-17* movies get *2.5%* lesser critic's score on Rotten Tomatoes than G films.
+
+- PG: All else held constant, *PG7* movies get *4.35%* lesser critic's score on Rotten Tomatoes than G films.
+
+- PG-13: All else held constant, *PG-13* movies get *7.13%* lesser critic's score on Rotten Tomatoes than G films.
+
+- R: All else held constant, *R* movies get *6.01%* lesser critic's score on Rotten Tomatoes than G films.
+
+- Unrated: All else held constant, *Unrated* movies get *1.7%* lesser critic's score on Rotten Tomatoes than G films.
+
+
+**For best actress win:**
+
+- Yes: All else held constant, movies that *win best actress award in Oscar* score *1.67%* more critic's score than movies that don't win the same.
+
+
+
+#### Inference for our Rotten Tomatoes model for predicting the critic's score:
+
+
+We can view the summary of our model to view the slopes($\beta_i$'s), intercepts and other parameters of interest. 
+
+```{r}
+summary(mod_RT)
+```
+
+Before we analyze the above results, let us state our hypotheses for testing our model: 
+
+$H_0$: There is nothing going on with our model and the same has no predictive power at all. Mathematically, the NULL hypothesis states:
+
+$$H_0: \beta_1 = \beta_2 = ... = \beta_{10}$$
+
+$H_A$: At least on of the $\beta_i$ is non-zero.
+
+
+Looking at the p-value above, we find that it is definitely less than 0.05, so we reject our NULL hypothesis in favour of the alternative. This, in essence, means our model as a whole is significant and there is something going on with it. This claim is also supported by the significant value of the F-statistic that we have got.
+Thus, we can say that with the help of our model, we can successfully predict the critic's scores of a given film on Rotten Tomatoes.
+
+
+
+#### Diagnostics for our Rotten Tomatoes model:
+
+
+Now, that we've dropped many variables from our dataframe that included all the potential predictors for critic's score on Rotten Tomatoes for our model, let us also keep only the selected predictors in the same.
+
+Viewing all the variables in the *tab_mod_RT* dataframe: 
+
+```{r}
+names(tab_mod_RT)
+```
+
+Dropping those that are absent from our model:
+
+```{r}
+tab_mod_RT <- tab_mod_RT[, c(1,2,3,4,5,6,7,8,9,14,18)]
+names(tab_mod_RT)
+```
+
+
+
+For running the diagnostics, we are only interested in numberical explanatory variables. 
+In our model we have two explanatory variable and they are `audience_Score` and `runtime`. 
+
+
+
+
+**Checking for linear relationship:**
+
+
+
+
+*Checking for linearity between critics score and audience score:*
+
+
+
+We are going to use the residual plot for finding out if or not there exists a linear relationship between `critics_score` and `audience_score`.
+
+```{r}
+plot(mod_RT$residuals ~ tab_mod_RT$audience_score, col = "#E7B800", main = "Critics score V/S Residuals", pch = 18, xlab = "Critics score", ylab = "Residuals")
+abline(lm(mod_RT$residuals ~ tab_mod_RT$audience_score), col = "brown")
+
+```
+
+The above plot clearly shows the residuals are randomly scattered from 0 to 100 and the spread is also perfectly centred at 0. This verifies that there in fact exists a linear relationship between the audience and the critics score on Rotten Tomatoes.
+
+
+
+
+*Checking for linearity between critics score and  runtime:*
+
+
+
+We are going to use the residual plot for finding out if or not there exists a linear relationship between `critics_score` and `runtime`.
+
+```{r}
+plot(mod_RT$residuals ~ tab_mod_RT$runtime, col = "#E7B800", main = "Runtime V/S Residuals", pch = 18, xlab = "Runtime of films (in mins)", ylab = "Residuals")
+abline(lm(mod_RT$residuals ~ tab_mod_RT$runtime), col = "brown")
+```
+
+Just like in case of our previous model, here again, we find a significant cluster of points till 150 minutes of runtime with the spread being centred at 0. This is also not very surprising as movies mostly last for 120 to 180 minutes in general. 
+Let us rescale our spread to view parts of it for finding out any trends inside the cluster and even beyond it:
+
+```{r}
+par(mfrow= c(2,2))
+
+plot(mod_RT$residuals ~ tab_mod_RT$runtime, col = "orange", main = "Runtime of films V/S Residuals", pch = 18, xlab = "Runtime up to 80 mins.", ylab = "Residuals", xlim = c(37,80))
+abline(lm(mod_RT$residuals ~ tab_mod_RT$runtime), col = "brown")
+
+plot(mod_RT$residuals ~ tab_mod_RT$runtime, col = "cyan", main = "Runtime of films V/S Residuals", pch = 18, xlab = "Runtime from 80 to 100 mins", ylab = "Residuals", xlim = c(80,100))
+abline(lm(mod_RT$residuals ~ tab_mod_RT$runtime), col = "brown")
+
+plot(mod_RT$residuals ~ tab_mod_RT$runtime, col = "magenta", main = "Runtime of films V/S Residuals", pch = 18, xlab = "Runtime from 100 to 150 mins", ylab = "Residuals", xlim = c(100,150))
+abline(lm(mod_RT$residuals ~ tab_mod_RT$runtime), col = "brown")
+
+plot(mod_RT$residuals ~ tab_mod_RT$runtime, col = "green", main = "Runtime of films V/S Residuals", pch = 18, xlab = "Runtime from 150 to 280 mins", ylab = "Residuals", xlim = c(150,275))
+abline(lm(mod_RT$residuals ~ tab_mod_RT$runtime), col = "brown")
+```
+
+In all the abaove four plots, we find that the residuals are much more randomly scattered and the spread is roughly centred at 0. 
+This, thus proves that our condition for linearity between the residuals and the runtime is satisfied. 
+
+
+
+
+**Checking for nearly normal residuals:**
+
+
+We can check for the normality of the residuals using a historgram and a normal probability plot. 
+
+```{r}
+par(mfrow = c(1,2))
+
+hist(mod_RT$residuals, col = "pink", xlab = "Residuals", main = "Histogram of residuals")
+
+qqnorm(mod_RT$residuals, col = "yellow", pch = 18)
+qqline(mod_RT$residuals, col = "brown")
+```
+
+
+From the histogram we see that the residuals are normally distributed and centred at 0. 
+From the normarl probability plot we can see that there is only the slightest of deviations at the tail areas but, otherwise, the residuals are pretty pefectly normal.
+
+Thus, we can say our condition for normal residuals is nicely met. 
+
+
+
+
+**Checking for constant variability of the residuals:**
+
+
+For checking this condition we are going to plot our fitted values against the residuals and see for a random scatter plot, in essesnce nothing like fan shaped plot.
+
+```{r}
+grid2 <- matrix(c(1, 2), nrow = 2, ncol = 1, byrow = F)
+
+g2_cell1 <- ggplot(data = mod_RT, aes(x = mod_RT$fitted.values, y = mod_RT$residuals, color = mod_RT$fitted))+
+  geom_jitter()+
+  geom_smooth(method = "lm")
+
+g2_cell2 <- ggplot(mod_RT)+
+  geom_point(aes(x = mod_RT$fitted.values, y = abs(mod_RT$residuals)), col = "#009999", pch = 18)
+
+grid.arrange(g2_cell1 + labs(x = "Fitted values", y = "Residuals"), g2_cell2 + labs(x = "Fitted values", y = "Absolute residuals"), ncol = 1)
+```
+
+
+In the first plot (on the top panel) we see nothing like a fan shape. In fact, the residuals seem to spread randomly centred at 0. The same observation is reflected in the second plot (on the right panel) where we have the absolute values of residuals plotted against the fitted values. If there were any such interesting happenings to observe, we would be expected to find a triangle which definitely is not the case here. 
+Hence, we can conclude that our model satisfies the condition of having constant variability.
+One interesting thing to observe here is the absence of observations between 50 to 60 values of the fitted values. There seems to be an evident gap tearing the plot into two halves. We are not sure about what the cause is but, it might be interesting to find out.  
+
+
+
+
+**Checking for independent residuals:**
+
+
+
+By checking this condition what we are actually trying to find out is if our not the data we have collected is really independent. In order to ensure independence, the residuals v/s order of data collection plot should be completely randomly scattered and be centred at 0. 
+Let us plot and check for the same.
+
+```{r}
+plot(mod_RT$residuals, col = "aquamarine3", pch = 18, ylab = "Residuals", xlab = "Index in order of data collection")
+abline(lm(mod_RT$residuals~ 1), col = "brown")
+```
+
+Looking at the above plot we can be ceratin about two things- first, the residuals are pretty randomly scattered and second, the spread is centred at 0. 
+This helps us ascertain the data collected has no time series structure and are independent of each other. 
+
+
+
+
+Now, that we are sure about all the four conditions being faily met for the diagnostics, we can say that our model is a valid Multiple Linear Regression model. 
+
+* * *
+
+## Part 5: Prediction
+
+
+Now, that our models have been finally made and tested let us try to check their predictive power by making predictions. 
+We are going to use the movie *'The Conjuring 2'* and below are all the information that we will need to feed our predictors to give us the predicted results:
+
+Title type - **Feature Film**
+Genre - **Horro**
+Runtime - **134 minutes**
+MPAA rating - **R (Restricted for the horror action scenes)**
+Theatre release date - **10 June 2016**
+DVD release date - **13 September 2016**
+Oscar nominations - **None**
+IMDB rating - **7.4/10**
+Number of votes on IMDB - **196667**
+Critics score on Rotten Tomatoes - **80%**
+Critics rating on Rotten Tomatoes - **Certified Fresh**
+Audience rating on Rotten Tomatoes - **Upright**
+
+(All information has been taken from [here](https://www.imdb.com/title/tt3065204/) and [here](https://www.rottentomatoes.com/m/the_conjuring_2))
+
+Let us create separate dataframes using the above data for *The Conjuring 2* to be used in both our models of IMDB and Rotten Tomatoes respectively.
+
+```{r}
+the_conjuring_2_IMDB = data.frame(title_type = "Feature Film", genre = "Horror", runtime = 134, mpaa_rating = "R", thtr_rel_year = 2016, dvd_rel_year = 2016, dvd_rel_month = 9, imdb_num_votes = 196667, best_pic_nom = "no", best_pic_win = "no", best_dir_win = "no")
+
+the_conjuring_2_RT = data.frame(critics_rating = "Certified Fresh", audience_rating = "Upright", audience_score = 81, title_type = "Feature Film", genre = "Horror", runtime = 134, mpaa_rating = "R", thtr_rel_year = 2016, dvd_rel_day = 13, best_actress_win = "no")
+```
+
+
+### Making predictions for The Conjuring 2:
+
+
+####Predicting the movie's IMDB rating:
+
+Before we make the actual prediction, let us create an object that stores the actual value of IMDB rating of *The Conjuring 2*:
+
+```{r}
+actual_imdb_rating <- 7.4
+```
+
+Making the predictions: 
+
+```{r}
+IMDB_predictions <- predict(mod_IMDB, the_conjuring_2_IMDB, interval = "prediction", level = 0.95)
+IMDB_predictions[,1:3]
+```
+
+**Interpretation:**
+
+From the above results we can say that *our model is 95% confident that the IMDB rating of The Conjuring 2 lies between 4.6 and 7.9.*
+
+Let us also calculate the error percentage associated with our prediction:
+
+```{r}
+error_IMDB <- (abs(actual_imdb_rating - IMDB_predictions[1]) / actual_imdb_rating) *100
+print(error_IMDB)
+```
+
+The error associated with our model for one test is roughly 16%.
+
+
+####Predicting the movie's critic's score on Rotten Tomatoes:
+
+Before we make the actual prediction, let us create an object that stores the actual value of the critic's score on Rotten Tomatoes for the movie *The Conjuring 2*:
+
+```{r}
+actual_critics_score <- 80
+```
+
+Making the predictions: 
+
+```{r}
+RT_predictions <- predict(mod_RT, the_conjuring_2_RT, interval = "prediction", level = 0.95)
+RT_predictions[,1:3]
+```
+
+**Interpretation:**
+
+From the above results we can say that *our model is 95% confident that the critic's score on Rotten Tomatoes for the movie The Conjuring 2 lies between 62% and 109.5%* The upper limit doesn't make any sense in this context. 
+
+Let us also calculate the error percentage associated with our prediction:
+
+```{r}
+error_RT <- (abs(actual_critics_score - RT_predictions[1]) / actual_critics_score) *100
+print(error_RT)
+```
+
+The error associated with our model for one test is roughly 7%.
+
+* * *
+
+## Part 6: Conclusion
+
+
+```{r}
+par(mfrow = c(1,2))
+
+barplot(c(RT_predictions[1], actual_critics_score), col = c("#F0033F", "orange"), legend.text = c("Predicted", "Actual"), main = "Critic's score on Rotten Tomatoes", args.legend = list(x = "center"))
+barplot(c(IMDB_predictions[1], actual_imdb_rating), col = c("Sky blue", "orange"), legend.text = c("Predicted", "Actual"), main = "IMDB ratings", args.legend = list(x = "center"))
+```
+
+
+Based on the above predictions we can conclude the following:
+
+
+- The model for predicting IMDB ratings of movies underestimates the IMDB rating for the film *The Conjuring 2*.
+
+- The model for predicting the critic's score of movies on Rotten Tomatoes overestimates the score for the film *The Conjuring 2*.
+
+- The error percentage associated with our IMDB model is roughly *15%*.
+
+- The error percentage associated with our model for predicting critic's score is roughly *7%*.
+
+- With almost half of the error percentage associated with the IMDB model, our model for predicting the critic's score on Rotten Tomatoes stands out as a better model.
+
+- The above observation was also reflected by the values of adjusted R squared associated with both the models where the model for predicting the critic's score on Rotten Tomatoes had a much greater value of adjusted R squared (*0.829*) than the model for predicting the IMDB ratings (*0.414*).
+
